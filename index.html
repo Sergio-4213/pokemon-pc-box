@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pokémon PC Box - Pokédex Nacional</title>
+    <!-- Modern font -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css?v=2026-07-02-modal-speed-2">
+</head>
+<body>
+
+    <div class="loading-overlay" id="loading">
+        <div class="spinner"></div>
+        <h2>Carregando Pokémon da Pokédex Nacional...</h2>
+    </div>
+
+    <h1>Pokémon PC Box - Pokédex Nacional</h1>
+    <p class="subtitle">Layout exato das boxes: 5 linhas x 6 colunas - 905 Pokémon até a 8ª geração, em ordem da Pokédex Nacional</p>
+
+    <nav class="page-switcher" aria-label="Páginas do site">
+        <button class="page-switch-btn active" id="boxPageBtn" onclick="switchPage('boxes')" aria-pressed="true">Boxes</button>
+        <button class="page-switch-btn" id="checklistPageBtn" onclick="switchPage('checklist')" aria-pressed="false">Checklist</button>
+    </nav>
+
+    <section class="dex-transfer-panel" id="dexTransferPanel" aria-label="Dados da checklist">
+        <span class="dex-transfer-label">Dados da checklist</span>
+        <div class="dex-transfer-actions">
+            <button class="export-checklist-btn" onclick="exportChecklistToCSV()">Exportar CSV</button>
+            <button class="import-checklist-btn" onclick="openChecklistImport()">Importar checklist</button>
+            <input id="checklistImportInput" type="file" accept=".csv,text/csv" hidden onchange="importChecklistCSV(event)">
+        </div>
+    </section>
+
+    <!-- Main box view: search, Excel export and PC box navigation. -->
+    <main class="page-view active" id="boxPage">
+    <div class="search-wrapper" id="searchWrapper">
+        <input type="text" class="search-bar" id="searchInput" placeholder="Pesquisar Pokémon pelo nome..." autocomplete="off">
+        <svg class="search-icon" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <button class="search-clear" id="searchClear" title="Limpar pesquisa">&times;</button>
+        <div class="suggestions" id="suggestions"></div>
+    </div>
+
+    <div class="search-result-banner" id="resultBanner">
+        <img id="bannerSprite" alt="" decoding="async" onerror="useFallbackSprite(this)">
+        <span id="bannerText"></span>
+        <button class="banner-close" onclick="clearSearch()" title="Fechar">&times;</button>
+    </div>
+
+    <div class="controls">
+        <button onclick="exportToExcelHTML()">
+            <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
+            Baixar como Planilha Excel (.xls)
+        </button>
+    </div>
+
+    <div class="box-nav" aria-label="Navegação de boxes">
+        <button class="box-nav-arrow" id="prevBoxPage" onclick="shiftBoxPage(-1)" title="Ver box anterior" aria-label="Ver box anterior">
+            &#8249;
+        </button>
+        <div class="tabs" id="tabs"></div>
+        <button class="box-nav-arrow" id="nextBoxPage" onclick="shiftBoxPage(1)" title="Ver proxima box" aria-label="Ver proxima box">
+            &#8250;
+        </button>
+    </div>
+    <div id="boxes-wrapper"></div>
+    </main>
+
+    <!-- Living Dex view: progress, filters and capture batch actions. -->
+    <main class="page-view checklist-page" id="checklistPage">
+        <section class="checklist-summary" aria-live="polite">
+            <div>
+                <h2>Checklist da Living Dex</h2>
+                <p>Marque os Pokémon que você já capturou. O progresso fica salvo neste navegador.</p>
+            </div>
+            <div class="progress-wrap">
+                <div class="progress-label">
+                    <span><span class="capture-count" id="capturedCount">0</span> / <span id="totalChecklistCount">905</span> capturados</span>
+                    <span id="capturedPercent">0%</span>
+                </div>
+                <div class="progress-track" aria-hidden="true">
+                    <div class="progress-fill" id="capturedProgress"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="checklist-toolbar" aria-label="Filtros da checklist">
+            <input class="checklist-input" id="checklistSearch" type="text" placeholder="Pesquisar na checklist..." autocomplete="off">
+            <select class="checklist-select" id="generationFilter" aria-label="Filtrar por geração">
+                <option value="all">Todas as gerações</option>
+                <option value="1">1 geração - Kanto</option>
+                <option value="2">2 geração - Johto</option>
+                <option value="3">3 geração - Hoenn</option>
+                <option value="4">4 geração - Sinnoh</option>
+                <option value="5">5 geração - Unova</option>
+                <option value="6">6 geração - Kalos</option>
+                <option value="7">7 geração - Alola</option>
+                <option value="8">8 geração - Galar/Hisui</option>
+            </select>
+            <select class="checklist-select" id="statusFilter" aria-label="Filtrar por status">
+                <option value="all">Todos</option>
+                <option value="pending">Pendentes</option>
+                <option value="captured">Capturados</option>
+            </select>
+        </section>
+
+        <div class="box-nav checklist-box-nav" aria-label="Navegação de boxes da checklist">
+            <button class="box-nav-arrow" id="prevChecklistBox" onclick="shiftChecklistBox(-1)" title="Ver box anterior da checklist" aria-label="Ver box anterior da checklist">
+                &#8249;
+            </button>
+            <div class="tabs" id="checklistTabs"></div>
+            <button class="box-nav-arrow" id="nextChecklistBox" onclick="shiftChecklistBox(1)" title="Ver proxima box da checklist" aria-label="Ver proxima box da checklist">
+                &#8250;
+            </button>
+        </div>
+
+        <section class="batch-bar" aria-label="Ações em lote">
+            <span class="batch-info" id="batchInfo">0 selecionados</span>
+            <div class="batch-actions">
+                <button class="secondary-btn" onclick="selectVisibleChecklist()">Selecionar visíveis</button>
+                <button class="captured-btn" onclick="confirmSelectedCaptured()">Confirmar capturados</button>
+                <button class="danger-btn" onclick="confirmSelectedPending()">Marcar pendentes</button>
+                <button class="secondary-btn" onclick="clearChecklistSelection()">Limpar seleção</button>
+            </div>
+        </section>
+
+        <section class="checklist-box-container" aria-label="Box atual da checklist">
+            <div class="checklist-grid" id="checklistGrid"></div>
+        </section>
+    </main>
+
+    <!-- Pokemon detail modal shared by box slots, search results and evolution links. -->
+    <div class="modal-backdrop" id="pokemonModalBackdrop" onclick="handleModalBackdropClick(event)">
+        <button class="modal-nav modal-nav-prev" id="modalPrev" onclick="navigateModal(-1)" title="Pokémon anterior">&#8249;</button>
+        <div class="pokemon-modal" role="dialog" aria-modal="true" aria-labelledby="modalPokemonName">
+            <button class="modal-close" onclick="closePokemonModal()" title="Fechar detalhes">&times;</button>
+            <div id="pokemonModalContent"></div>
+        </div>
+        <button class="modal-nav modal-nav-next" id="modalNext" onclick="navigateModal(1)" title="Próximo Pokémon">&#8250;</button>
+    </div>
+
+    <script src="pokemon_species.js?v=2026-07-02-clean-final"></script>
+    <script src="encounter_config.js?v=2026-07-02-clean-final"></script>
+    <script src="app.js?v=2026-07-02-modal-speed-2"></script>
+</body>
+</html>
