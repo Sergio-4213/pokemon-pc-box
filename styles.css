@@ -15,10 +15,6 @@
     margin: 0;
     padding: 0;
     font-family: 'Outfit', sans-serif;
-}
-
-/* ===== CUSTOM SCROLLBAR (auto-hide) ===== */
-* {
     scrollbar-width: thin;
     scrollbar-color: transparent transparent;
 }
@@ -98,7 +94,6 @@ p.subtitle {
     background: transparent;
     color: var(--text-muted);
     border: 1px solid transparent;
-    box-shadow: none;
 }
 
 .page-switch-btn:hover {
@@ -1418,7 +1413,6 @@ button.danger-btn:hover {
     border-radius: 4px;
     border: 1px solid rgba(16, 185, 129, 0.2);
     line-height: 1.25;
-    white-space: nowrap;
     max-width: 140px;
     white-space: normal;
 }
@@ -1675,7 +1669,6 @@ button.danger-btn:hover {
     font-size: 0.95rem;
     font-weight: 700;
     color: #c7d2fe;
-    margin-bottom: 0;
     line-height: 1.35;
 }
 .encounter-loc-details {
@@ -1696,7 +1689,6 @@ button.danger-btn:hover {
     display: flex;
     flex-wrap: wrap;
     gap: 0.3rem;
-    margin-top: 0;
     justify-content: flex-end;
     margin-left: auto;
 }

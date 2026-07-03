@@ -7,10 +7,11 @@ const TABS_PER_PAGE = 5;
 
 const STORAGE = {
     captured: 'pokemonLivingDexCaptured',
-    speciesList: 'pokemonSpeciesListCache:v2',
-    api: 'pokemonApiCache:v2:',
-    encounters: 'pokemonEncounterCache:v2:',
-    encounterConfig: 'pokemonEncounterConfig:v2'
+    speciesList: 'pokemonSpeciesListCache:v3',
+    api: 'pokemonApiCache:v3:',
+    encounters: 'pokemonEncounterCache:v3:',
+    encounterConfig: 'pokemonEncounterConfig:v3',
+    translations: 'pokemonTextTranslations:v1:'
 };
 
 const generationRanges = [
@@ -48,7 +49,7 @@ let checklistRenderFrame = null;
 let selectedSuggestionIdx = -1;
 let encounterConfigPromise = null;
 
-const memoryCache = new Map();
+
 const detailsCache = new Map();
 const encounterCache = new Map();
 
@@ -138,13 +139,11 @@ function hideLoading() {
 
 async function loadPokemonList() {
     if (Array.isArray(window.POKEMON_SPECIES) && window.POKEMON_SPECIES.length === TOTAL_POKEMON) {
-        window.__pokemonLoadSource = 'script';
         return window.POKEMON_SPECIES;
     }
 
     const cached = readStorage(STORAGE.speciesList);
     if (Array.isArray(cached) && cached.length === TOTAL_POKEMON) {
-        window.__pokemonLoadSource = 'storage';
         return cached;
     }
 
@@ -155,7 +154,6 @@ async function loadPokemonList() {
         .filter(item => item.id >= 1 && item.id <= TOTAL_POKEMON && item.name)
         .slice(0, TOTAL_POKEMON);
     writeStorage(STORAGE.speciesList, normalized);
-    window.__pokemonLoadSource = 'pokeapi';
     return normalized;
 }
 
@@ -537,6 +535,7 @@ async function loadOpenPokemonDetails(poke, pokeId) {
         if (currentModalPokeId !== pokeId) return;
         detailsCache.set(pokeId, detail);
         renderModal(detail);
+        translateVisibleDetail(detail);
         if (detail.evolutionChain === null) loadEvolution(detail);
     } catch (error) {
         console.warn('Detalhes externos indisponiveis:', error);
@@ -567,12 +566,12 @@ function createInstantDetail(poke) {
 
 async function loadPokemonDetail(poke) {
     const [pokemon, species] = await Promise.all([
-        fetchJson(`https://pokeapi.co/api/v2/pokemon/${poke.id}`, { timeout: 5000, cache: false }),
-        fetchJson(`https://pokeapi.co/api/v2/pokemon-species/${poke.id}`, { timeout: 5000, cache: false })
+        fetchJson(`https://pokeapi.co/api/v2/pokemon/${poke.id}`, { timeout: 5000, cache: true }),
+        fetchJson(`https://pokeapi.co/api/v2/pokemon-species/${poke.id}`, { timeout: 5000, cache: true })
     ]);
 
-    const description = pickText(species.flavor_text_entries, entry => entry.flavor_text);
-    const category = pickText(species.genera, entry => entry.genus);
+    const description = pickLocalizedText(species.flavor_text_entries, entry => entry.flavor_text);
+    const category = pickLocalizedText(species.genera, entry => entry.genus);
     const detail = {
         id: poke.id,
         name: poke.name,
@@ -580,8 +579,10 @@ async function loadPokemonDetail(poke) {
         sprite: poke.sprite,
         fallbackSprite: poke.fallbackSprite,
         types: pokemon.types.map(item => item.type.name),
-        description: description || 'Descricao nao disponivel.',
-        category: category || 'Categoria nao informada.',
+        description: description.text || 'Descricao nao disponivel.',
+        descriptionLanguage: description.language,
+        category: category.text || 'Categoria nao informada.',
+        categoryLanguage: category.language,
         region: getSpeciesRegion(species),
         evolutionChain: null,
         evolutionChainUrl: species.evolution_chain ? species.evolution_chain.url : ''
@@ -594,7 +595,7 @@ async function loadEvolution(detail) {
     if (!detail.evolutionChainUrl) return;
 
     try {
-        const chain = await fetchJson(detail.evolutionChainUrl, { timeout: 5000, cache: false });
+        const chain = await fetchJson(detail.evolutionChainUrl, { timeout: 5000, cache: true });
         const evolutionInfo = getEvolutionInfo(chain.chain);
         const cached = { ...detail, evolutionChain: evolutionInfo };
         detailsCache.set(detail.id, cached);
@@ -633,19 +634,15 @@ function renderModal(detail) {
         </div>
         <div class="modal-section">
             <h3>Descricao</h3>
-            <p id="detailDescription">${detail.description}</p>
+            <p id="detailDescription">${escapeHtml(detail.description)}</p>
         </div>
         <div class="modal-section">
             <h3>Regiao</h3>
             <p>${detail.region}</p>
         </div>
         <div class="modal-section">
-            <h3>Tipo</h3>
-            <div class="type-row" id="detailTypes">${typeBadges}</div>
-        </div>
-        <div class="modal-section">
             <h3>Categoria</h3>
-            <p id="detailCategory">${detail.category}</p>
+            <p id="detailCategory">${escapeHtml(detail.category)}</p>
         </div>
         <div class="modal-section">
             <h3>Linha evolutiva</h3>
@@ -685,9 +682,7 @@ function navigateModal(direction) {
     if (nextId >= 1 && nextId <= TOTAL_POKEMON) openPokemonDetails(nextId);
 }
 
-function openEvolutionPokemon(pokeId) {
-    openPokemonDetails(pokeId);
-}
+
 
 function updateModalNavButtons() {
     dom.modalPrev.disabled = currentModalPokeId <= 1;
@@ -730,26 +725,19 @@ async function toggleEncounterSection(pokeId, btn) {
     }
 }
 
-async function loadEncounterConfig() {
+function loadEncounterConfig() {
     if (!encounterConfigPromise) {
-        encounterConfigPromise = (async () => {
-            if (window.ENCOUNTER_CONFIG) return window.ENCOUNTER_CONFIG;
-
+        if (window.ENCOUNTER_CONFIG) {
+            encounterConfigPromise = Promise.resolve(window.ENCOUNTER_CONFIG);
+        } else {
             const cached = readStorage(STORAGE.encounterConfig);
-            if (cached) return cached;
-            return {
-                versionToRegion: {},
-                versionToGen: {},
-                regionDisplayOrder: [],
-                versionDisplayOrder: [],
-                versionDisplayNames: {},
-                starterPokemonIds: [],
-                methodTranslations: {},
-                locationTermTranslations: {},
-                placeSuffixTranslations: {},
+            encounterConfigPromise = Promise.resolve(cached || {
+                versionToRegion: {}, versionToGen: {}, regionDisplayOrder: [],
+                versionDisplayOrder: [], versionDisplayNames: {}, starterPokemonIds: [],
+                methodTranslations: {}, locationTermTranslations: {}, placeSuffixTranslations: {},
                 nonWildMethods: ['gift', 'gift-egg', 'only-one', 'event', 'roaming']
-            };
-        })();
+            });
+        }
     }
     return encounterConfigPromise;
 }
@@ -773,8 +761,8 @@ function renderEncounterContent(pokeId, encounters, config) {
     const methods = collectEncounterMethods(encounters);
     const starterIds = new Set(config.starterPokemonIds || []);
 
-    if (starterIds.has(pokeId) || !encounters.length || !hasWildMethod(methods, config)) {
-        return renderNoWildInfo(pokeId, methods, config);
+    if (!encounters.length || !hasWildMethod(methods, config)) {
+        return renderNoWildInfo(pokeId, methods, config, starterIds);
     }
 
     const groups = groupEncounters(encounters, config);
@@ -783,7 +771,7 @@ function renderEncounterContent(pokeId, encounters, config) {
         .map(group => renderEncounterGroup(group, config))
         .join('');
 
-    return rendered || renderNoWildInfo(pokeId, methods, config);
+    return rendered || renderNoWildInfo(pokeId, methods, config, starterIds);
 }
 
 function collectEncounterMethods(encounters) {
@@ -803,10 +791,10 @@ function hasWildMethod(methods, config) {
     return [...methods].some(method => !nonWild.has(method));
 }
 
-function renderNoWildInfo(pokeId, methods, config) {
-    const starterIds = new Set(config.starterPokemonIds || []);
-    const title = starterIds.has(pokeId) ? 'Linha de Pokemon inicial' : 'Sem encontro selvagem comum';
-    const detail = starterIds.has(pokeId)
+function renderNoWildInfo(pokeId, methods, config, starterIds) {
+    const isStarter = starterIds.has(pokeId);
+    const title = isStarter ? 'Linha de Pokemon inicial' : 'Sem encontro selvagem comum';
+    const detail = isStarter
         ? 'Normalmente obtido como inicial, por evolucao, presente ou troca.'
         : 'Verifique evolucao, troca, presente, evento ou transferencia entre jogos.';
     const tags = methods.size
@@ -899,14 +887,15 @@ function renderVersionBadges(versions, config) {
 }
 
 function renderLocationCard(location, region, config) {
-    const min = Number.isFinite(location.minLv) ? location.minLv : '?';
-    const max = Number.isFinite(location.maxLv) ? location.maxLv : '?';
+    const min = Number.isFinite(location.minLv) && location.minLv < 999 ? location.minLv : '?';
+    const max = Number.isFinite(location.maxLv) && location.maxLv > 0 ? location.maxLv : '?';
     const level = min === max ? min : `${min}-${max}`;
-    const methods = [...location.methods].slice(0, 2).map(method => `<span class="method-tag">${formatEncounterMethod(method, config)}</span>`).join('');
+    const chance = location.chance > 0 ? `${location.chance}%` : 'Variavel';
+    const methods = [...location.methods].slice(0, 2).map(method => `<span class="method-tag">${formatEncounterMethod(method, config, location.area)}</span>`).join('');
     return `
         <div class="encounter-loc-card">
             <div class="encounter-loc-name">${formatLocationName(location.area, region, config)}</div>
-            <div class="encounter-loc-details"><span><strong>Nv.</strong> ${level}</span><span><strong>Chance</strong> ${location.chance}%</span></div>
+            <div class="encounter-loc-details"><span><strong>Nv.</strong> ${level}</span><span><strong>Chance</strong> ${chance}</span></div>
             <div class="encounter-loc-methods">${methods}</div>
         </div>
     `;
@@ -1022,7 +1011,7 @@ function getEvolutionInfo(chain) {
         let html = '';
         path.forEach((node, index) => {
             if (index > 0) html += `<div class="evo-connector"><span class="evo-method">${node.method || 'Evolucao'}</span><span class="evo-arrow">→</span></div>`;
-            html += `<div class="evo-poke" role="button" tabindex="0" onclick="openEvolutionPokemon(${node.id})"><img src="${officialSprite(node.id)}" data-fallback-src="${smallSprite(node.id)}" decoding="async" onerror="useFallbackSprite(this)" alt="${node.name}"><span class="evo-dex">${formatId(node.id)}</span><span class="evo-name">${displayName(node.name)}</span></div>`;
+            html += `<div class="evo-poke" role="button" tabindex="0" onclick="openPokemonDetails(${node.id})"><img src="${officialSprite(node.id)}" data-fallback-src="${smallSprite(node.id)}" decoding="async" onerror="useFallbackSprite(this)" alt="${node.name}"><span class="evo-dex">${formatId(node.id)}</span><span class="evo-name">${displayName(node.name)}</span></div>`;
         });
         rows.push(`<div class="evo-chain-row">${html}</div>`);
     });
@@ -1049,12 +1038,17 @@ function formatEvolutionMethod(details) {
     return detail.trigger ? displayName(detail.trigger.name) : 'Evolucao';
 }
 
-function pickText(entries = [], getText) {
+function pickLocalizedText(entries = [], getText) {
     const preferred = entries.find(entry => entry.language.name === 'pt-br')
         || entries.find(entry => entry.language.name === 'pt')
         || entries.find(entry => entry.language.name === 'en')
         || entries[0];
-    return preferred ? getText(preferred).replace(/\f/g, ' ').replace(/\s+/g, ' ').trim() : '';
+    return preferred
+        ? {
+            text: getText(preferred).replace(/\f/g, ' ').replace(/\s+/g, ' ').trim(),
+            language: preferred.language ? preferred.language.name : ''
+        }
+        : { text: '', language: '' };
 }
 
 function getSpeciesRegion(species) {
@@ -1064,7 +1058,8 @@ function getSpeciesRegion(species) {
     return `${displayName(species.name)} normalmente e associado a ${region}, dentro da ${genNumber || '?'}ª geracao.`;
 }
 
-function formatEncounterMethod(method, config) {
+function formatEncounterMethod(method, config, areaName = '') {
+    if (areaName.includes('friend-safari')) return 'Friend Safari';
     return (config.methodTranslations || {})[method] || displayName(method);
 }
 
@@ -1077,16 +1072,91 @@ function getVersionOrder(version, config) {
 function formatLocationName(areaName, region, config) {
     const terms = config.locationTermTranslations || {};
     const suffixes = config.placeSuffixTranslations || {};
-    const clean = areaName.replace(/-area$/, '').replace(new RegExp(`^${region.toLowerCase()}-`, 'i'), '');
+    const clean = areaName.replace(/-area$/, '').replace(new RegExp(`^${escapeRegex(region.toLowerCase())}-`, 'i'), '');
     const route = clean.match(/^route-(\d+)/);
     if (route) return `Rota ${route[1]}`;
+    if (clean.startsWith('friend-safari')) return formatFriendSafariName(clean, terms);
 
     const parts = clean.split('-').filter(Boolean);
     const suffix = parts[parts.length - 1];
     if (suffixes[suffix] && parts.length > 1) {
-        return `${suffixes[suffix]} ${parts.slice(0, -1).map(part => terms[part] || displayName(part)).join(' ')}`;
+        return `${suffixes[suffix]} ${parts.slice(0, -1).map(part => formatLocationPart(part, terms)).join(' ')}`;
     }
-    return parts.map(part => terms[part] || displayName(part)).join(' ');
+    return parts.map(part => formatLocationPart(part, terms)).join(' ');
+}
+
+function formatFriendSafariName(areaName, terms) {
+    const safariType = areaName.replace(/^friend-safari-?/, '');
+    if (!safariType) return 'Friend Safari';
+    return `Friend Safari (${formatLocationPart(safariType, terms)})`;
+}
+
+function formatLocationPart(part, terms) {
+    return terms[part] || displayName(part);
+}
+
+function translateVisibleDetail(detail) {
+    if (isPortugueseLanguage(detail.descriptionLanguage) && isPortugueseLanguage(detail.categoryLanguage)) return;
+
+    Promise.all([
+        isPortugueseLanguage(detail.descriptionLanguage)
+            ? Promise.resolve(detail.description)
+            : translateToPortuguese(detail.description, detail.descriptionLanguage),
+        isPortugueseLanguage(detail.categoryLanguage)
+            ? Promise.resolve(detail.category)
+            : translateToPortuguese(detail.category, detail.categoryLanguage)
+    ]).then(([description, category]) => {
+        const translated = {
+            ...detail,
+            description: description || detail.description,
+            descriptionLanguage: description ? 'pt' : detail.descriptionLanguage,
+            category: category || detail.category,
+            categoryLanguage: category ? 'pt' : detail.categoryLanguage
+        };
+        detailsCache.set(detail.id, translated);
+
+        if (currentModalPokeId !== detail.id) return;
+        const descriptionEl = document.getElementById('detailDescription');
+        const categoryEl = document.getElementById('detailCategory');
+        if (descriptionEl && translated.description) descriptionEl.textContent = translated.description;
+        if (categoryEl && translated.category) categoryEl.textContent = translated.category;
+    }).catch(() => {
+    });
+}
+
+async function translateToPortuguese(text, sourceLanguage = 'auto') {
+    if (!text || text.startsWith('Carregando') || text.includes('indisponivel')) return text;
+
+    const storageKey = `${STORAGE.translations}${hashText(`${sourceLanguage}:${text}`)}`;
+    const cached = readStorage(storageKey);
+    if (typeof cached === 'string' && cached.trim()) return cached;
+
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(sourceLanguage || 'auto')}&tl=pt&dt=t&q=${encodeURIComponent(text)}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+    try {
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        const translated = Array.isArray(data[0]) ? data[0].map(part => part[0]).join('').trim() : '';
+        if (translated) writeStorage(storageKey, translated);
+        return translated || text;
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
+function isPortugueseLanguage(language = '') {
+    return language === 'pt' || language === 'pt-br';
+}
+
+function hashText(text) {
+    let hash = 0;
+    for (let i = 0; i < text.length; i++) {
+        hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+    }
+    return Math.abs(hash).toString(36);
 }
 
 function spriteAttrs(poke) {
@@ -1139,6 +1209,16 @@ function debounce(callback, delay) {
 
 function escapeRegex(text) {
     return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function escapeHtml(text = '') {
+    return String(text).replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[char]));
 }
 
 function readStorage(key) {
