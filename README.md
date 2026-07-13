@@ -87,7 +87,7 @@ O modal mostra:
 - linha evolutiva;
 - secao "Onde encontrar este Pokemon?".
 
-Para melhorar a fluidez, o modal abre primeiro com os dados principais. Traducoes e linha evolutiva podem aparecer alguns instantes depois, sem bloquear a abertura da janela.
+Para melhorar a fluidez, o modal abre primeiro com os dados principais. A linha evolutiva pode aparecer alguns instantes depois, sem bloquear a abertura da janela. Descricoes sem versao em portugues sao exibidas no idioma fornecido pela PokeAPI; o site nao envia textos para servicos de traducao de terceiros.
 
 Na linha evolutiva, os Pokemon tambem sao clicaveis. Ao clicar em um Pokemon da evolucao, o modal troca para a descricao desse Pokemon, substituindo a descricao que estava aberta.
 
@@ -148,20 +148,20 @@ O progresso fica salvo no navegador.
 
 O site usa `localStorage` para salvar informacoes locais.
 
-Chaves usadas:
+Chaves principais usadas:
 
 ```text
 pokemonLivingDexCaptured
-pokemonTranslationCache
+pokemonSpeciesListCache:v3
+pokemonApiCache:v3:
+pokemonEncounterCache:v3:
 ```
 
 ### `pokemonLivingDexCaptured`
 
 Salva os Pokemon marcados como capturados na checklist.
 
-### `pokemonTranslationCache`
-
-Salva traducoes ja carregadas para evitar buscar a mesma traducao varias vezes.
+Os caches de dados externos possuem prazo de validade e limite de entradas para reduzir o uso de armazenamento do navegador.
 
 Se voce limpar os dados do navegador, usar outro navegador ou abrir em outro dispositivo, esses dados podem nao estar disponiveis.
 
@@ -169,8 +169,8 @@ Se voce limpar os dados do navegador, usar outro navegador ou abrir em outro dis
 
 O site usa dados de:
 
-- PokeAPI: dados de Pokemon, especies, evolucoes, sprites e locais de encontro.
-- Google Translate endpoint publico: traducao automatica de alguns textos quando nao ha texto em portugues disponivel.
+- PokeAPI: dados de Pokemon, especies, evolucoes e locais de encontro.
+- GitHub (repositorio PokeAPI): sprites oficiais e de fallback.
 
 Por isso, algumas funcionalidades precisam de internet para carregar corretamente.
 
@@ -209,5 +209,4 @@ Para atualizar o projeto para novas geracoes, sera necessario:
 Pokemon e uma marca registrada da Nintendo, Game Freak e The Pokemon Company.
 
 Este projeto e feito para uso pessoal/educacional e nao e afiliado oficialmente a Nintendo, Game Freak, The Pokemon Company ou PokeAPI.
-
 

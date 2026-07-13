@@ -264,6 +264,8 @@ button.csv-btn:hover {
     transition: background 0.3s ease, border-color 0.3s ease, color 0.3s ease;
     min-width: 96px;
     text-align: center;
+    display: block;
+    font: inherit;
 }
 
 .tab.active {
@@ -334,6 +336,19 @@ button.csv-btn:hover {
 .slot.empty {
     opacity: 0.5;
     border-style: dashed;
+}
+
+.empty-name {
+    color: var(--text-muted);
+}
+
+.slot:focus-visible,
+.checklist-card:focus-visible,
+.suggestion-item:focus-visible,
+.evo-poke:focus-visible,
+.tab:focus-visible {
+    outline: 3px solid var(--accent);
+    outline-offset: 2px;
 }
 
 .slot img {

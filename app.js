@@ -4,14 +4,16 @@ const BOX_COLS = 6;
 const PER_BOX = BOX_ROWS * BOX_COLS;
 const TOTAL_BOXES = Math.ceil(TOTAL_POKEMON / PER_BOX);
 const TABS_PER_PAGE = 5;
+const TRUSTED_POKEAPI_PREFIX = 'https://pokeapi.co/api/v2/';
+const CACHE_TTL = { species: 30 * 24 * 60 * 60 * 1000, api: 7 * 24 * 60 * 60 * 1000, encounters: 14 * 24 * 60 * 60 * 1000 };
+const CACHE_LIMITS = { api: 120, encounters: 80 };
 
 const STORAGE = {
     captured: 'pokemonLivingDexCaptured',
     speciesList: 'pokemonSpeciesListCache:v3',
     api: 'pokemonApiCache:v3:',
     encounters: 'pokemonEncounterCache:v3:',
-    encounterConfig: 'pokemonEncounterConfig:v3',
-    translations: 'pokemonTextTranslations:v1:'
+    encounterConfig: 'pokemonEncounterConfig:v3'
 };
 
 const generationRanges = [
@@ -45,6 +47,7 @@ let visibleBoxStart = 0;
 let activeChecklistBoxIndex = 0;
 let visibleChecklistBoxStart = 0;
 let currentModalPokeId = null;
+let lastModalFocus = null;
 let checklistRenderFrame = null;
 let selectedSuggestionIdx = -1;
 let encounterConfigPromise = null;
@@ -71,7 +74,8 @@ async function init() {
     loadCapturedPokemon();
 
     try {
-        pokemonData = (await loadPokemonList()).map(makePokemonEntry);
+        pokemonData = (await loadPokemonList()).map(makePokemonEntry).filter(Boolean);
+        if (pokemonData.length !== TOTAL_POKEMON) throw new Error('Lista local de Pokemon invalida.');
         pokemonById = new Map(pokemonData.map(poke => [poke.id, poke]));
         renderBoxes();
         updateBoxArrowState();
@@ -118,7 +122,9 @@ function bindDom() {
         modalBackdrop: document.getElementById('pokemonModalBackdrop'),
         modalContent: document.getElementById('pokemonModalContent'),
         modalPrev: document.getElementById('modalPrev'),
-        modalNext: document.getElementById('modalNext')
+        modalNext: document.getElementById('modalNext'),
+        modalClose: document.getElementById('modalClose'),
+        modalDialog: document.querySelector('.pokemon-modal')
     });
 }
 
@@ -130,6 +136,27 @@ function bindEvents() {
         if (!dom.searchWrapper.contains(event.target)) hideSuggestions();
     });
     document.addEventListener('keydown', handleGlobalKeys);
+    document.addEventListener('error', handleSpriteError, true);
+    dom.boxPageBtn.addEventListener('click', () => switchPage('boxes'));
+    dom.checklistPageBtn.addEventListener('click', () => switchPage('checklist'));
+    document.getElementById('exportChecklistBtn').addEventListener('click', exportChecklistToCSV);
+    document.getElementById('importChecklistBtn').addEventListener('click', openChecklistImport);
+    dom.importInput.addEventListener('change', importChecklistCSV);
+    document.getElementById('clearSearchBtn').addEventListener('click', clearSearch);
+    document.getElementById('exportBoxesBtn').addEventListener('click', exportToExcelHTML);
+    dom.prevBoxPage.addEventListener('click', () => shiftBoxPage(-1));
+    dom.nextBoxPage.addEventListener('click', () => shiftBoxPage(1));
+    dom.prevChecklistBox.addEventListener('click', () => shiftChecklistBox(-1));
+    dom.nextChecklistBox.addEventListener('click', () => shiftChecklistBox(1));
+    document.getElementById('selectVisibleChecklistBtn').addEventListener('click', selectVisibleChecklist);
+    document.getElementById('confirmCapturedBtn').addEventListener('click', confirmSelectedCaptured);
+    document.getElementById('confirmPendingBtn').addEventListener('click', confirmSelectedPending);
+    document.getElementById('clearChecklistSelectionBtn').addEventListener('click', clearChecklistSelection);
+    dom.modalBackdrop.addEventListener('click', handleModalBackdropClick);
+    dom.modalPrev.addEventListener('click', () => navigateModal(-1));
+    dom.modalNext.addEventListener('click', () => navigateModal(1));
+    dom.modalClose.addEventListener('click', closePokemonModal);
+    document.addEventListener('click', handleDynamicAction);
 }
 
 function hideLoading() {
@@ -142,7 +169,7 @@ async function loadPokemonList() {
         return window.POKEMON_SPECIES;
     }
 
-    const cached = readStorage(STORAGE.speciesList);
+    const cached = readCachedStorage(STORAGE.speciesList, CACHE_TTL.species);
     if (Array.isArray(cached) && cached.length === TOTAL_POKEMON) {
         return cached;
     }
@@ -153,22 +180,24 @@ async function loadPokemonList() {
         .map((item, index) => ({ id: Number(item.id) || index + 1, name: item.name }))
         .filter(item => item.id >= 1 && item.id <= TOTAL_POKEMON && item.name)
         .slice(0, TOTAL_POKEMON);
-    writeStorage(STORAGE.speciesList, normalized);
+    writeCachedStorage(STORAGE.speciesList, normalized, CACHE_LIMITS.api);
     return normalized;
 }
 
 function makePokemonEntry({ id, name }) {
+    const numericId = Number(id);
+    if (!Number.isInteger(numericId) || numericId < 1 || numericId > TOTAL_POKEMON || typeof name !== 'string' || !/^[a-z0-9-]+$/.test(name)) return null;
     const label = displayName(name);
     return {
-        id,
+        id: numericId,
         name,
         label,
         searchName: label.toLowerCase(),
-        dexLabel: formatId(id),
-        generation: generationRanges.find(gen => id >= gen.start && id <= gen.end),
-        boxIndex: Math.floor((id - 1) / PER_BOX),
-        sprite: officialSprite(id),
-        fallbackSprite: smallSprite(id)
+        dexLabel: formatId(numericId),
+        generation: generationRanges.find(gen => numericId >= gen.start && numericId <= gen.end),
+        boxIndex: Math.floor((numericId - 1) / PER_BOX),
+        sprite: officialSprite(numericId),
+        fallbackSprite: smallSprite(numericId)
     };
 }
 
@@ -192,8 +221,10 @@ function renderActiveBox() {
         if (poke) {
             slot.className = 'slot';
             slot.dataset.pokeId = poke.id;
+            slot.dataset.action = 'open-pokemon';
+            slot.setAttribute('role', 'button');
+            slot.tabIndex = 0;
             slot.title = `Ver detalhes de ${poke.label}`;
-            slot.onclick = () => openPokemonDetails(poke.id);
             slot.innerHTML = `
                 <span class="dex-number">${poke.dexLabel}</span>
                 <img ${spriteAttrs(poke)} loading="lazy" width="64" height="64">
@@ -201,7 +232,7 @@ function renderActiveBox() {
             `;
         } else {
             slot.className = 'slot empty';
-            slot.innerHTML = '<span class="poke-name" style="color: var(--text-muted)">Vazio</span>';
+            slot.innerHTML = '<span class="poke-name empty-name">Vazio</span>';
         }
 
         grid.appendChild(slot);
@@ -212,19 +243,22 @@ function renderActiveBox() {
 }
 
 function renderBoxTabs() {
-    renderTabStrip(dom.tabs, visibleBoxStart, TOTAL_BOXES, activeBoxIndex, switchTab);
+    renderTabStrip(dom.tabs, visibleBoxStart, TOTAL_BOXES, activeBoxIndex);
     updateBoxArrowState();
 }
 
-function renderTabStrip(container, visibleStart, boxCount, activeIndex, onSelect) {
+function renderTabStrip(container, visibleStart, boxCount, activeIndex) {
     const fragment = document.createDocumentFragment();
     const end = Math.min(visibleStart + TABS_PER_PAGE, boxCount);
 
     for (let boxIndex = visibleStart; boxIndex < end; boxIndex++) {
-        const tab = document.createElement('div');
+        const tab = document.createElement('button');
+        tab.type = 'button';
         tab.className = `tab ${boxIndex === activeIndex ? 'active' : ''}`;
         tab.textContent = `Box ${boxIndex + 1}`;
-        tab.onclick = () => onSelect(boxIndex);
+        tab.dataset.action = 'select-box';
+        tab.dataset.boxIndex = boxIndex;
+        tab.dataset.tabTarget = container.id === 'checklistTabs' ? 'checklist' : 'boxes';
         fragment.appendChild(tab);
     }
 
@@ -310,7 +344,7 @@ function renderChecklist() {
     checklistCurrentIds = pageItems.map(poke => poke.id);
 
     updateChecklistSummary();
-    renderTabStrip(dom.checklistTabs, visibleChecklistBoxStart, boxCount, activeChecklistBoxIndex, switchChecklistBox);
+    renderTabStrip(dom.checklistTabs, visibleChecklistBoxStart, boxCount, activeChecklistBoxIndex);
     updateChecklistArrowState(boxCount);
     updateBatchInfo();
 
@@ -327,7 +361,7 @@ function renderChecklist() {
         const selected = checklistSelection.has(poke.id);
         const gen = poke.generation ? poke.generation.value : '';
         return `
-            <article class="checklist-card ${captured ? 'captured' : ''} ${selected ? 'selected' : ''}" data-poke-id="${poke.id}" onclick="toggleChecklistSelection(${poke.id})" title="${poke.label}">
+            <article class="checklist-card ${captured ? 'captured' : ''} ${selected ? 'selected' : ''}" data-poke-id="${poke.id}" data-action="toggle-checklist" role="button" tabindex="0" title="${escapeHtml(poke.label)}">
                 <span class="selection-dot">${selected ? '&#10003;' : ''}</span>
                 <span class="caught-marker" aria-hidden="true">&#10003;</span>
                 <span class="dex-number">${poke.dexLabel} · B${poke.boxIndex + 1} · ${gen}ª</span>
@@ -366,7 +400,7 @@ function toggleChecklistSelection(pokeId) {
 
     card.classList.toggle('selected', checklistSelection.has(pokeId));
     const dot = card.querySelector('.selection-dot');
-    if (dot) dot.innerHTML = checklistSelection.has(pokeId) ? '&#10003;' : '';
+    if (dot) dot.textContent = checklistSelection.has(pokeId) ? '✓' : '';
     updateBatchInfo();
 }
 
@@ -444,7 +478,7 @@ function renderSuggestions(matches, query) {
     dom.suggestions.innerHTML = matches.map(poke => {
         const highlighted = poke.label.replace(new RegExp(`(${escapeRegex(query)})`, 'gi'), '<mark>$1</mark>');
         return `
-            <div class="suggestion-item" data-id="${poke.id}" onclick="selectPokemon(${poke.id})">
+            <div class="suggestion-item" data-id="${poke.id}" data-action="select-pokemon" role="button" tabindex="0">
                 <img ${spriteAttrs(poke)} width="40" height="40">
                 <div class="suggestion-info">
                     <span class="suggestion-name">${highlighted}</span>
@@ -521,9 +555,13 @@ function openPokemonDetails(pokeId) {
     const poke = pokemonById.get(pokeId);
     if (!poke) return;
 
+    if (!dom.modalBackdrop.classList.contains('visible')) {
+        lastModalFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    }
     currentModalPokeId = pokeId;
     updateModalNavButtons();
     dom.modalBackdrop.classList.add('visible');
+    dom.modalClose.focus();
 
     renderModal(createInstantDetail(poke));
     afterNextPaint(() => loadOpenPokemonDetails(poke, pokeId));
@@ -535,7 +573,6 @@ async function loadOpenPokemonDetails(poke, pokeId) {
         if (currentModalPokeId !== pokeId) return;
         detailsCache.set(pokeId, detail);
         renderModal(detail);
-        translateVisibleDetail(detail);
         if (detail.evolutionChain === null) loadEvolution(detail);
     } catch (error) {
         console.warn('Detalhes externos indisponiveis:', error);
@@ -614,7 +651,10 @@ async function loadEvolution(detail) {
 
 function renderModal(detail) {
     const typeBadges = detail.types.length
-        ? detail.types.map(type => `<span class="type-badge type-${type}">${typeNames[type] || displayName(type)}</span>`).join('')
+        ? detail.types.map(type => {
+            const safeType = Object.prototype.hasOwnProperty.call(typeNames, type) ? type : 'unknown';
+            return `<span class="type-badge type-${safeType}">${escapeHtml(typeNames[type] || displayName(type))}</span>`;
+        }).join('')
         : '<span class="type-placeholder">Carregando tipos...</span>';
     const evolution = detail.evolutionChain === null
         ? '<p class="detail-loading">Carregando linha evolutiva...</p>'
@@ -627,7 +667,7 @@ function renderModal(detail) {
             <img class="modal-sprite" ${spriteAttrs(detail)}>
             <div>
                 <div class="modal-dex">${formatId(detail.id)}</div>
-                <h2 class="modal-name" id="modalPokemonName">${displayName(detail.name)}</h2>
+                <h2 class="modal-name" id="modalPokemonName">${escapeHtml(displayName(detail.name))}</h2>
                 <div class="type-row">${typeBadges}</div>
                 ${renderPokemonDatabaseLink(detail)}
             </div>
@@ -638,7 +678,7 @@ function renderModal(detail) {
         </div>
         <div class="modal-section">
             <h3>Regiao</h3>
-            <p>${detail.region}</p>
+            <p>${escapeHtml(detail.region)}</p>
         </div>
         <div class="modal-section">
             <h3>Categoria</h3>
@@ -649,7 +689,7 @@ function renderModal(detail) {
             <div id="detailEvolution">${evolution}</div>
         </div>
         <div class="modal-section">
-            <button class="encounter-toggle-btn" onclick="toggleEncounterSection(${detail.id}, this)">
+            <button class="encounter-toggle-btn" data-action="toggle-encounters" data-poke-id="${detail.id}">
                 <span>📍</span> Onde encontrar este Pokemon?
                 <span class="toggle-arrow">▼</span>
             </button>
@@ -670,6 +710,8 @@ function updateModalFallback() {
 function closePokemonModal() {
     dom.modalBackdrop.classList.remove('visible');
     currentModalPokeId = null;
+    if (lastModalFocus && lastModalFocus.isConnected) lastModalFocus.focus();
+    lastModalFocus = null;
 }
 
 function handleModalBackdropClick(event) {
@@ -690,9 +732,43 @@ function updateModalNavButtons() {
 }
 
 function handleGlobalKeys(event) {
-    if (event.key === 'Escape') closePokemonModal();
+    if (event.key === 'Escape' && dom.modalBackdrop.classList.contains('visible')) closePokemonModal();
     else if (currentModalPokeId && event.key === 'ArrowLeft') navigateModal(-1);
     else if (currentModalPokeId && event.key === 'ArrowRight') navigateModal(1);
+    else if (currentModalPokeId && event.key === 'Tab') trapModalFocus(event);
+    else if ((event.key === 'Enter' || event.key === ' ') && event.target instanceof Element && event.target.matches('[data-action]')) {
+        event.preventDefault();
+        event.target.click();
+    }
+}
+
+function trapModalFocus(event) {
+    const focusable = [...dom.modalBackdrop.querySelectorAll('button:not([disabled]), [href], [tabindex="0"]')]
+        .filter(element => element instanceof HTMLElement && element.offsetParent !== null);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+    }
+}
+
+function handleDynamicAction(event) {
+    const target = event.target instanceof Element ? event.target.closest('[data-action]') : null;
+    if (!target) return;
+    const id = Number(target.dataset.pokeId || target.dataset.id);
+    if (target.dataset.action === 'open-pokemon' && Number.isInteger(id)) openPokemonDetails(id);
+    else if (target.dataset.action === 'select-pokemon' && Number.isInteger(id)) selectPokemon(id);
+    else if (target.dataset.action === 'toggle-checklist' && Number.isInteger(id)) toggleChecklistSelection(id);
+    else if (target.dataset.action === 'toggle-encounters' && Number.isInteger(id)) toggleEncounterSection(id, target);
+    else if (target.dataset.action === 'select-box') {
+        const boxIndex = Number(target.dataset.boxIndex);
+        if (Number.isInteger(boxIndex)) (target.dataset.tabTarget === 'checklist' ? switchChecklistBox : switchTab)(boxIndex);
+    }
 }
 
 async function toggleEncounterSection(pokeId, btn) {
@@ -730,7 +806,7 @@ function loadEncounterConfig() {
         if (window.ENCOUNTER_CONFIG) {
             encounterConfigPromise = Promise.resolve(window.ENCOUNTER_CONFIG);
         } else {
-            const cached = readStorage(STORAGE.encounterConfig);
+            const cached = readCachedStorage(STORAGE.encounterConfig, CACHE_TTL.encounters);
             encounterConfigPromise = Promise.resolve(cached || {
                 versionToRegion: {}, versionToGen: {}, regionDisplayOrder: [],
                 versionDisplayOrder: [], versionDisplayNames: {}, starterPokemonIds: [],
@@ -745,7 +821,7 @@ function loadEncounterConfig() {
 async function loadEncounters(pokeId) {
     if (encounterCache.has(pokeId)) return encounterCache.get(pokeId);
     const key = `${STORAGE.encounters}${pokeId}`;
-    const cached = readStorage(key);
+    const cached = readCachedStorage(key, CACHE_TTL.encounters);
     if (Array.isArray(cached)) {
         encounterCache.set(pokeId, cached);
         return cached;
@@ -753,7 +829,7 @@ async function loadEncounters(pokeId) {
 
     const encounters = await fetchJson(`https://pokeapi.co/api/v2/pokemon/${pokeId}/encounters`, { timeout: 6000, cache: false });
     encounterCache.set(pokeId, encounters);
-    writeStorage(key, encounters);
+    writeCachedStorage(key, encounters, CACHE_LIMITS.encounters);
     return encounters;
 }
 
@@ -798,15 +874,15 @@ function renderNoWildInfo(pokeId, methods, config, starterIds) {
         ? 'Normalmente obtido como inicial, por evolucao, presente ou troca.'
         : 'Verifique evolucao, troca, presente, evento ou transferencia entre jogos.';
     const tags = methods.size
-        ? [...methods].slice(0, 4).map(method => `<span class="method-tag">${formatEncounterMethod(method, config)}</span>`).join('')
+        ? [...methods].slice(0, 4).map(method => `<span class="method-tag">${escapeHtml(formatEncounterMethod(method, config))}</span>`).join('')
         : '<span class="method-tag">Metodo especial</span>';
 
     return `
         <div class="special-obtain-card">
             <div class="special-obtain-icon">★</div>
             <div class="special-obtain-body">
-                <h4>${title}</h4>
-                <p>${detail}</p>
+                <h4>${escapeHtml(title)}</h4>
+                <p>${escapeHtml(detail)}</p>
                 <div class="special-obtain-methods">
                     <span class="special-method-label">Como obter:</span>
                     ${tags}
@@ -867,8 +943,8 @@ function renderEncounterGroup(group, config) {
     return `
         <div class="encounter-game-group">
             <div class="encounter-game-header">
-                <span class="region-label">${group.region}</span>
-                <span class="gen-label">(${gen})</span>
+                <span class="region-label">${escapeHtml(group.region)}</span>
+                <span class="gen-label">(${escapeHtml(gen)})</span>
                 <div class="version-badges">${renderVersionBadges(versions, config)}</div>
             </div>
             <div class="encounter-locations-list">
@@ -882,7 +958,7 @@ function renderEncounterGroup(group, config) {
 function renderVersionBadges(versions, config) {
     return versions.slice(0, 6).map(version => {
         const label = (config.versionDisplayNames || {})[version] || displayName(version);
-        return `<span class="version-badge v-default">${label}</span>`;
+        return `<span class="version-badge v-default">${escapeHtml(label)}</span>`;
     }).join('') + (versions.length > 6 ? `<span class="version-badge v-default">+${versions.length - 6}</span>` : '');
 }
 
@@ -891,10 +967,10 @@ function renderLocationCard(location, region, config) {
     const max = Number.isFinite(location.maxLv) && location.maxLv > 0 ? location.maxLv : '?';
     const level = min === max ? min : `${min}-${max}`;
     const chance = location.chance > 0 ? `${location.chance}%` : 'Variavel';
-    const methods = [...location.methods].slice(0, 2).map(method => `<span class="method-tag">${formatEncounterMethod(method, config, location.area)}</span>`).join('');
+    const methods = [...location.methods].slice(0, 2).map(method => `<span class="method-tag">${escapeHtml(formatEncounterMethod(method, config, location.area))}</span>`).join('');
     return `
         <div class="encounter-loc-card">
-            <div class="encounter-loc-name">${formatLocationName(location.area, region, config)}</div>
+            <div class="encounter-loc-name">${escapeHtml(formatLocationName(location.area, region, config))}</div>
             <div class="encounter-loc-details"><span><strong>Nv.</strong> ${level}</span><span><strong>Chance</strong> ${chance}</span></div>
             <div class="encounter-loc-methods">${methods}</div>
         </div>
@@ -902,8 +978,7 @@ function renderLocationCard(location, region, config) {
 }
 
 function renderEncounterFallback() {
-    const link = document.querySelector('.pokemon-db-link');
-    const href = link ? link.href : 'https://pokemondb.net/pokedex/national';
+    const href = 'https://pokemondb.net/pokedex/national';
     return `
         <div class="encounter-empty">
             <p>As localizacoes externas nao responderam a tempo.</p>
@@ -984,10 +1059,11 @@ function downloadBlob(blob, filename) {
 }
 
 async function fetchJson(url, { timeout = 6000, cache = true } = {}) {
-    const key = cache && url.startsWith('https://pokeapi.co/api/v2/') ? `${STORAGE.api}${url}` : '';
+    if (!isTrustedPokeApiUrl(url)) throw new Error('Origem de dados nao confiavel.');
+    const key = cache ? `${STORAGE.api}${url}` : '';
     if (key) {
-        const cached = readStorage(key);
-        if (cached) return cached;
+        const cached = readCachedStorage(key, CACHE_TTL.api);
+        if (cached !== null) return cached;
     }
 
     const controller = new AbortController();
@@ -997,7 +1073,7 @@ async function fetchJson(url, { timeout = 6000, cache = true } = {}) {
         const response = await fetch(url, { signal: controller.signal });
         if (!response.ok) throw new Error(`HTTP ${response.status}: ${url}`);
         const data = await response.json();
-        if (key) writeStorage(key, data);
+        if (key) writeCachedStorage(key, data, CACHE_LIMITS.api);
         return data;
     } finally {
         clearTimeout(timeoutId);
@@ -1010,8 +1086,8 @@ function getEvolutionInfo(chain) {
         if (path.length < 2) return;
         let html = '';
         path.forEach((node, index) => {
-            if (index > 0) html += `<div class="evo-connector"><span class="evo-method">${node.method || 'Evolucao'}</span><span class="evo-arrow">→</span></div>`;
-            html += `<div class="evo-poke" role="button" tabindex="0" onclick="openPokemonDetails(${node.id})"><img src="${officialSprite(node.id)}" data-fallback-src="${smallSprite(node.id)}" decoding="async" onerror="useFallbackSprite(this)" alt="${node.name}"><span class="evo-dex">${formatId(node.id)}</span><span class="evo-name">${displayName(node.name)}</span></div>`;
+            if (index > 0) html += `<div class="evo-connector"><span class="evo-method">${escapeHtml(node.method || 'Evolucao')}</span><span class="evo-arrow">→</span></div>`;
+            html += `<div class="evo-poke" role="button" tabindex="0" data-action="open-pokemon" data-poke-id="${node.id}"><img src="${officialSprite(node.id)}" data-fallback-src="${smallSprite(node.id)}" decoding="async" alt="${escapeHtml(node.name)}"><span class="evo-dex">${formatId(node.id)}</span><span class="evo-name">${escapeHtml(displayName(node.name))}</span></div>`;
         });
         rows.push(`<div class="evo-chain-row">${html}</div>`);
     });
@@ -1095,76 +1171,20 @@ function formatLocationPart(part, terms) {
     return terms[part] || displayName(part);
 }
 
-function translateVisibleDetail(detail) {
-    if (isPortugueseLanguage(detail.descriptionLanguage) && isPortugueseLanguage(detail.categoryLanguage)) return;
-
-    Promise.all([
-        isPortugueseLanguage(detail.descriptionLanguage)
-            ? Promise.resolve(detail.description)
-            : translateToPortuguese(detail.description, detail.descriptionLanguage),
-        isPortugueseLanguage(detail.categoryLanguage)
-            ? Promise.resolve(detail.category)
-            : translateToPortuguese(detail.category, detail.categoryLanguage)
-    ]).then(([description, category]) => {
-        const translated = {
-            ...detail,
-            description: description || detail.description,
-            descriptionLanguage: description ? 'pt' : detail.descriptionLanguage,
-            category: category || detail.category,
-            categoryLanguage: category ? 'pt' : detail.categoryLanguage
-        };
-        detailsCache.set(detail.id, translated);
-
-        if (currentModalPokeId !== detail.id) return;
-        const descriptionEl = document.getElementById('detailDescription');
-        const categoryEl = document.getElementById('detailCategory');
-        if (descriptionEl && translated.description) descriptionEl.textContent = translated.description;
-        if (categoryEl && translated.category) categoryEl.textContent = translated.category;
-    }).catch(() => {
-    });
-}
-
-async function translateToPortuguese(text, sourceLanguage = 'auto') {
-    if (!text || text.startsWith('Carregando') || text.includes('indisponivel')) return text;
-
-    const storageKey = `${STORAGE.translations}${hashText(`${sourceLanguage}:${text}`)}`;
-    const cached = readStorage(storageKey);
-    if (typeof cached === 'string' && cached.trim()) return cached;
-
-    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(sourceLanguage || 'auto')}&tl=pt&dt=t&q=${encodeURIComponent(text)}`;
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-    try {
-        const response = await fetch(url, { signal: controller.signal });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        const translated = Array.isArray(data[0]) ? data[0].map(part => part[0]).join('').trim() : '';
-        if (translated) writeStorage(storageKey, translated);
-        return translated || text;
-    } finally {
-        clearTimeout(timeoutId);
-    }
-}
-
-function isPortugueseLanguage(language = '') {
-    return language === 'pt' || language === 'pt-br';
-}
-
-function hashText(text) {
-    let hash = 0;
-    for (let i = 0; i < text.length; i++) {
-        hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
-    }
-    return Math.abs(hash).toString(36);
-}
-
 function spriteAttrs(poke) {
-    return `src="${poke.sprite}" data-fallback-src="${poke.fallbackSprite}" decoding="async" onerror="useFallbackSprite(this)" alt="${poke.name}"`;
+    return `src="${poke.sprite}" data-fallback-src="${poke.fallbackSprite}" decoding="async" alt="${escapeHtml(poke.name)}"`;
 }
 
 function useFallbackSprite(img) {
     if (img.dataset.fallbackSrc && img.src !== img.dataset.fallbackSrc) img.src = img.dataset.fallbackSrc;
+}
+
+function handleSpriteError(event) {
+    if (event.target instanceof HTMLImageElement && event.target.dataset.fallbackSrc) useFallbackSprite(event.target);
+}
+
+function isTrustedPokeApiUrl(url) {
+    return typeof url === 'string' && url.startsWith(TRUSTED_POKEAPI_PREFIX);
 }
 
 function officialSprite(id) {
@@ -1232,6 +1252,36 @@ function readStorage(key) {
 function writeStorage(key, value) {
     try {
         localStorage.setItem(key, JSON.stringify(value));
+    } catch (error) {
+    }
+}
+
+function readCachedStorage(key, maxAge) {
+    const cached = readStorage(key);
+    if (!cached || typeof cached !== 'object' || !Number.isFinite(cached.savedAt) || !Object.prototype.hasOwnProperty.call(cached, 'value')) return null;
+    if (Date.now() - cached.savedAt > maxAge) {
+        try { localStorage.removeItem(key); } catch (error) { }
+        return null;
+    }
+    return cached.value;
+}
+
+function writeCachedStorage(key, value, maxEntries = 0) {
+    if (maxEntries) pruneCache(key.substring(0, key.lastIndexOf(':') + 1), maxEntries - 1);
+    writeStorage(key, { savedAt: Date.now(), value });
+}
+
+function pruneCache(prefix, maxEntries) {
+    try {
+        const entries = [];
+        for (let index = 0; index < localStorage.length; index++) {
+            const key = localStorage.key(index);
+            if (!key || !key.startsWith(prefix)) continue;
+            const cached = readStorage(key);
+            entries.push({ key, savedAt: Number(cached && cached.savedAt) || 0 });
+        }
+        entries.sort((a, b) => a.savedAt - b.savedAt);
+        while (entries.length > maxEntries) localStorage.removeItem(entries.shift().key);
     } catch (error) {
     }
 }

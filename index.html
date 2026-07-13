@@ -3,10 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https://raw.githubusercontent.com; connect-src https://pokeapi.co; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
     <title>Pokémon PC Box - Pokédex Nacional</title>
     <!-- Modern font -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=2026-07-03-compact-pt-locations">
+    <link rel="stylesheet" href="styles.css?v=2026-07-12-security-hardening">
 </head>
 <body>
 
@@ -19,16 +21,16 @@
     <p class="subtitle">Layout exato das boxes: 5 linhas x 6 colunas - 905 Pokémon até a 8ª geração, em ordem da Pokédex Nacional</p>
 
     <nav class="page-switcher" aria-label="Páginas do site">
-        <button class="page-switch-btn active" id="boxPageBtn" onclick="switchPage('boxes')" aria-pressed="true">Boxes</button>
-        <button class="page-switch-btn" id="checklistPageBtn" onclick="switchPage('checklist')" aria-pressed="false">Checklist</button>
+        <button class="page-switch-btn active" id="boxPageBtn" aria-pressed="true">Boxes</button>
+        <button class="page-switch-btn" id="checklistPageBtn" aria-pressed="false">Checklist</button>
     </nav>
 
     <section class="dex-transfer-panel" id="dexTransferPanel" aria-label="Dados da checklist">
         <span class="dex-transfer-label">Dados da checklist</span>
         <div class="dex-transfer-actions">
-            <button class="export-checklist-btn" onclick="exportChecklistToCSV()">Exportar CSV</button>
-            <button class="import-checklist-btn" onclick="openChecklistImport()">Importar checklist</button>
-            <input id="checklistImportInput" type="file" accept=".csv,text/csv" hidden onchange="importChecklistCSV(event)">
+            <button class="export-checklist-btn" id="exportChecklistBtn">Exportar CSV</button>
+            <button class="import-checklist-btn" id="importChecklistBtn">Importar checklist</button>
+            <input id="checklistImportInput" type="file" accept=".csv,text/csv" hidden>
         </div>
     </section>
 
@@ -42,24 +44,24 @@
     </div>
 
     <div class="search-result-banner" id="resultBanner">
-        <img id="bannerSprite" alt="" decoding="async" onerror="useFallbackSprite(this)">
+        <img id="bannerSprite" alt="" decoding="async">
         <span id="bannerText"></span>
-        <button class="banner-close" onclick="clearSearch()" title="Fechar">&times;</button>
+        <button class="banner-close" id="clearSearchBtn" title="Fechar">&times;</button>
     </div>
 
     <div class="controls">
-        <button onclick="exportToExcelHTML()">
+        <button id="exportBoxesBtn">
             <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"></path></svg>
             Baixar como Planilha Excel (.xls)
         </button>
     </div>
 
     <div class="box-nav" aria-label="Navegação de boxes">
-        <button class="box-nav-arrow" id="prevBoxPage" onclick="shiftBoxPage(-1)" title="Ver box anterior" aria-label="Ver box anterior">
+        <button class="box-nav-arrow" id="prevBoxPage" title="Ver box anterior" aria-label="Ver box anterior">
             &#8249;
         </button>
         <div class="tabs" id="tabs"></div>
-        <button class="box-nav-arrow" id="nextBoxPage" onclick="shiftBoxPage(1)" title="Ver proxima box" aria-label="Ver proxima box">
+        <button class="box-nav-arrow" id="nextBoxPage" title="Ver proxima box" aria-label="Ver proxima box">
             &#8250;
         </button>
     </div>
@@ -105,11 +107,11 @@
         </section>
 
         <div class="box-nav checklist-box-nav" aria-label="Navegação de boxes da checklist">
-            <button class="box-nav-arrow" id="prevChecklistBox" onclick="shiftChecklistBox(-1)" title="Ver box anterior da checklist" aria-label="Ver box anterior da checklist">
+            <button class="box-nav-arrow" id="prevChecklistBox" title="Ver box anterior da checklist" aria-label="Ver box anterior da checklist">
                 &#8249;
             </button>
             <div class="tabs" id="checklistTabs"></div>
-            <button class="box-nav-arrow" id="nextChecklistBox" onclick="shiftChecklistBox(1)" title="Ver proxima box da checklist" aria-label="Ver proxima box da checklist">
+            <button class="box-nav-arrow" id="nextChecklistBox" title="Ver proxima box da checklist" aria-label="Ver proxima box da checklist">
                 &#8250;
             </button>
         </div>
@@ -117,10 +119,10 @@
         <section class="batch-bar" aria-label="Ações em lote">
             <span class="batch-info" id="batchInfo">0 selecionados</span>
             <div class="batch-actions">
-                <button class="secondary-btn" onclick="selectVisibleChecklist()">Selecionar visíveis</button>
-                <button class="captured-btn" onclick="confirmSelectedCaptured()">Confirmar capturados</button>
-                <button class="danger-btn" onclick="confirmSelectedPending()">Marcar pendentes</button>
-                <button class="secondary-btn" onclick="clearChecklistSelection()">Limpar seleção</button>
+                <button class="secondary-btn" id="selectVisibleChecklistBtn">Selecionar visíveis</button>
+                <button class="captured-btn" id="confirmCapturedBtn">Confirmar capturados</button>
+                <button class="danger-btn" id="confirmPendingBtn">Marcar pendentes</button>
+                <button class="secondary-btn" id="clearChecklistSelectionBtn">Limpar seleção</button>
             </div>
         </section>
 
@@ -130,17 +132,17 @@
     </main>
 
     <!-- Pokemon detail modal shared by box slots, search results and evolution links. -->
-    <div class="modal-backdrop" id="pokemonModalBackdrop" onclick="handleModalBackdropClick(event)">
-        <button class="modal-nav modal-nav-prev" id="modalPrev" onclick="navigateModal(-1)" title="Pokémon anterior">&#8249;</button>
-        <div class="pokemon-modal" role="dialog" aria-modal="true" aria-labelledby="modalPokemonName">
-            <button class="modal-close" onclick="closePokemonModal()" title="Fechar detalhes">&times;</button>
+    <div class="modal-backdrop" id="pokemonModalBackdrop">
+        <button class="modal-nav modal-nav-prev" id="modalPrev" title="Pokémon anterior">&#8249;</button>
+        <div class="pokemon-modal" role="dialog" aria-modal="true" aria-labelledby="modalPokemonName" tabindex="-1">
+            <button class="modal-close" id="modalClose" title="Fechar detalhes">&times;</button>
             <div id="pokemonModalContent"></div>
         </div>
-        <button class="modal-nav modal-nav-next" id="modalNext" onclick="navigateModal(1)" title="Próximo Pokémon">&#8250;</button>
+        <button class="modal-nav modal-nav-next" id="modalNext" title="Próximo Pokémon">&#8250;</button>
     </div>
 
-    <script src="pokemon_species.js?v=2026-07-03-compact-pt-locations"></script>
-    <script src="encounter_config.js?v=2026-07-03-compact-pt-locations"></script>
-    <script src="app.js?v=2026-07-03-compact-pt-locations"></script>
+    <script src="pokemon_species.js?v=2026-07-12-security-hardening"></script>
+    <script src="encounter_config.js?v=2026-07-12-security-hardening"></script>
+    <script src="app.js?v=2026-07-12-security-hardening"></script>
 </body>
 </html>
