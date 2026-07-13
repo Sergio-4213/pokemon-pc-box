@@ -41,6 +41,18 @@ Object.entries(versionGroups).forEach(([key, games]) => {
 // Starters: 3 linhas evolutivas × 8 gerações (IDs iniciais, 9 pokémon cada)
 const starterPokemonIds = [1,152,252,387,495,650,722,810].flatMap(s => Array.from({ length: 9 }, (_, i) => s + i));
 
+// Categorias que nao devem ser tratadas como encontro selvagem comum.
+const legendaryPokemonIds = [
+  144,145,146,150,243,244,245,249,250,377,378,379,380,381,382,383,384,
+  480,481,482,483,484,485,486,487,488,638,639,640,641,642,643,644,645,646,
+  716,717,718,772,773,785,786,787,788,789,790,791,792,800,888,889,890,
+  891,892,894,895,896,897,898,905
+];
+const mythicalPokemonIds = [151,251,385,386,489,490,491,492,493,494,647,648,649,719,720,721,801,802,807,808,809,893];
+const ultraBeastPokemonIds = [793,794,795,796,797,798,799,803,804,805,806];
+const fossilPokemonIds = [138,139,140,141,142,345,346,347,348,408,409,410,411,564,565,566,567,696,697,698,699,880,881,882,883,884,885,886,887];
+const babyPokemonIds = [172,173,174,175,236,238,239,240,298,360,406,433,438,439,440,446,447,458];
+
 // Traduções de localização (placeSuffix derivado automaticamente)
 const locationTerms = {
   route: 'Rota', area: 'Área', city: 'Cidade', town: 'Vila',
@@ -68,7 +80,7 @@ const placeSuffixes = ['city','town','forest','cave','tower','lake','road','park
 window.ENCOUNTER_CONFIG = {
   versionToRegion, versionToGen, versionDisplayOrder, versionDisplayNames,
   regionDisplayOrder: ['Kanto','Johto','Hoenn','Orre','Sinnoh','Unova','Kalos','Alola','Galar','Hisui','Outra'],
-  starterPokemonIds,
+  starterPokemonIds, legendaryPokemonIds, mythicalPokemonIds, ultraBeastPokemonIds, fossilPokemonIds, babyPokemonIds,
   methodTranslations: {
     walk: 'Andando na grama', surf: 'Surfando',
     'old-rod': 'Pescando (Vara Velha)', 'good-rod': 'Pescando (Vara Boa)', 'super-rod': 'Pescando (Super Vara)',

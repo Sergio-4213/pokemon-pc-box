@@ -14,7 +14,7 @@ O projeto mostra os Pokemon organizados em boxes no estilo PC, permite consultar
 - Informacoes de tipo, categoria, regiao, linha evolutiva e metodo de obtencao.
 - Secao "Onde encontrar este Pokemon?" com locais por regiao.
 - Locais de encontro limitados aos 3 mais uteis por regiao para manter a leitura limpa.
-- Tratamento especial para Pokemon que nao aparecem na natureza, como iniciais, fosseis, bebes, presentes e eventos.
+- Tratamento especial para linhas iniciais, lendarios, miticos, Ultra Beasts, fosseis e Pokemon bebe, sem confundir esses casos com encontro selvagem comum.
 - Checklist de Living Dex em aba separada.
 - Checklist organizada em boxes, nao em lista infinita.
 - Marcador visual para Pokemon capturados.
@@ -119,7 +119,9 @@ Se o Pokemon nao aparece na natureza, o site mostra uma explicacao breve, por ex
 - presente especial;
 - evolucao ou transferencia.
 
-As linhas dos iniciais sao tratadas como obtencao especial. Por exemplo, Charmander, Charmeleon e Charizard nao sao tratados como captura comum na natureza: a pagina indica obtencao por inicial/presente/troca e evolucao.
+As linhas dos iniciais sao tratadas como obtencao especial. Por exemplo, Charmander, Charmeleon e Charizard nao sao tratados como captura comum na natureza: a pagina indica escolha inicial/presente, evolucao, troca ou transferencia.
+
+Lendarios, miticos, Ultra Beasts e fosseis tambem mostram um painel de obtencao especial. Isso evita que um registro tecnico da API seja exibido como se fosse uma rota comum: a pagina orienta sobre encontro unico, historia, evento, missao, reviver fossil ou transferencia, conforme a categoria.
 
 Quando for evento, o painel tenta indicar o nome do evento ou distribuicao, como `Old Sea Map`, `GS Ball`, `Member Card`, `Liberty Pass` ou `Mystery Gift`.
 
@@ -209,4 +211,3 @@ Para atualizar o projeto para novas geracoes, sera necessario:
 Pokemon e uma marca registrada da Nintendo, Game Freak e The Pokemon Company.
 
 Este projeto e feito para uso pessoal/educacional e nao e afiliado oficialmente a Nintendo, Game Freak, The Pokemon Company ou PokeAPI.
-

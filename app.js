@@ -789,10 +789,14 @@ async function toggleEncounterSection(pokeId, btn) {
     content.innerHTML = '<div class="encounter-loading">Buscando localizacoes...</div>';
 
     try {
-        const [config, encounters] = await Promise.all([
-            loadEncounterConfig(),
-            loadEncounters(pokeId)
-        ]);
+        const config = await loadEncounterConfig();
+        const specialInfo = getSpecialObtainInfo(pokeId, config);
+        if (specialInfo) {
+            content.innerHTML = renderSpecialObtainInfo(specialInfo);
+            content.dataset.loaded = 'true';
+            return;
+        }
+        const encounters = await loadEncounters(pokeId);
         content.innerHTML = renderEncounterContent(pokeId, encounters, config);
         content.dataset.loaded = 'true';
     } catch (error) {
@@ -809,7 +813,8 @@ function loadEncounterConfig() {
             const cached = readCachedStorage(STORAGE.encounterConfig, CACHE_TTL.encounters);
             encounterConfigPromise = Promise.resolve(cached || {
                 versionToRegion: {}, versionToGen: {}, regionDisplayOrder: [],
-                versionDisplayOrder: [], versionDisplayNames: {}, starterPokemonIds: [],
+                versionDisplayOrder: [], versionDisplayNames: {}, starterPokemonIds: [], legendaryPokemonIds: [],
+                mythicalPokemonIds: [], ultraBeastPokemonIds: [], fossilPokemonIds: [], babyPokemonIds: [],
                 methodTranslations: {}, locationTermTranslations: {}, placeSuffixTranslations: {},
                 nonWildMethods: ['gift', 'gift-egg', 'only-one', 'event', 'roaming']
             });
@@ -835,10 +840,12 @@ async function loadEncounters(pokeId) {
 
 function renderEncounterContent(pokeId, encounters, config) {
     const methods = collectEncounterMethods(encounters);
-    const starterIds = new Set(config.starterPokemonIds || []);
+    const specialInfo = getSpecialObtainInfo(pokeId, config);
+
+    if (specialInfo) return renderSpecialObtainInfo(specialInfo);
 
     if (!encounters.length || !hasWildMethod(methods, config)) {
-        return renderNoWildInfo(pokeId, methods, config, starterIds);
+        return renderNoWildInfo(methods, config);
     }
 
     const groups = groupEncounters(encounters, config);
@@ -847,7 +854,7 @@ function renderEncounterContent(pokeId, encounters, config) {
         .map(group => renderEncounterGroup(group, config))
         .join('');
 
-    return rendered || renderNoWildInfo(pokeId, methods, config, starterIds);
+    return rendered || renderNoWildInfo(methods, config);
 }
 
 function collectEncounterMethods(encounters) {
@@ -867,12 +874,51 @@ function hasWildMethod(methods, config) {
     return [...methods].some(method => !nonWild.has(method));
 }
 
-function renderNoWildInfo(pokeId, methods, config, starterIds) {
-    const isStarter = starterIds.has(pokeId);
-    const title = isStarter ? 'Linha de Pokemon inicial' : 'Sem encontro selvagem comum';
-    const detail = isStarter
-        ? 'Normalmente obtido como inicial, por evolucao, presente ou troca.'
-        : 'Verifique evolucao, troca, presente, evento ou transferencia entre jogos.';
+function getSpecialObtainInfo(pokeId, config) {
+    const has = key => (config[key] || []).includes(pokeId);
+    if (has('starterPokemonIds')) return {
+        title: 'Linha de Pokemon inicial',
+        detail: 'Escolha um inicial no comeco da aventura ou receba-o como presente em jogos especificos. As formas evoluidas sao obtidas por evolucao, troca ou transferencia.'
+    };
+    if (has('mythicalPokemonIds')) return {
+        title: 'Pokemon mitico',
+        detail: 'Normalmente distribuido por evento, presente especial ou resgate. Algumas excecoes aparecem em missoes de jogos especificos; confirme a disponibilidade no jogo escolhido.'
+    };
+    if (has('legendaryPokemonIds')) return {
+        title: 'Pokemon lendario',
+        detail: 'Geralmente e um encontro unico ligado a historia, puzzle, caverna especial ou evento do jogo. Salve antes do encontro; nao e tratado como encontro selvagem comum.'
+    };
+    if (has('ultraBeastPokemonIds')) return {
+        title: 'Ultra Beast',
+        detail: 'Obtencao especial por Ultra Wormhole, missao, evento ou transferencia, dependendo do jogo. Nao e um encontro selvagem comum.'
+    };
+    if (has('fossilPokemonIds')) return {
+        title: 'Pokemon fossil',
+        detail: 'Normalmente obtido ao reviver um fossil em laboratorio ou por presente/transferencia. Alguns jogos podem oferecer metodos extras.'
+    };
+    if (has('babyPokemonIds')) return {
+        title: 'Pokemon bebe',
+        detail: 'Frequentemente obtido por reproducao e ovo; certos Pokemon exigem incenso no progenitor. Alguns jogos tambem possuem encontros ou presentes especificos.'
+    };
+    return null;
+}
+
+function renderSpecialObtainInfo({ title, detail }) {
+    return `
+        <div class="special-obtain-card">
+            <div class="special-obtain-icon">★</div>
+            <div class="special-obtain-body">
+                <h4>${escapeHtml(title)}</h4>
+                <p>${escapeHtml(detail)}</p>
+                <div class="special-obtain-methods"><span class="special-method-label">Como obter:</span><span class="method-tag">Obtencao especial</span></div>
+            </div>
+        </div>
+    `;
+}
+
+function renderNoWildInfo(methods, config) {
+    const title = 'Sem encontro selvagem comum';
+    const detail = 'Verifique evolucao, troca, presente, evento ou transferencia entre jogos.';
     const tags = methods.size
         ? [...methods].slice(0, 4).map(method => `<span class="method-tag">${escapeHtml(formatEncounterMethod(method, config))}</span>`).join('')
         : '<span class="method-tag">Metodo especial</span>';
