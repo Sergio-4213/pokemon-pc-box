@@ -139,9 +139,10 @@ function bindEvents() {
     document.addEventListener('error', handleSpriteError, true);
     dom.boxPageBtn.addEventListener('click', () => switchPage('boxes'));
     dom.checklistPageBtn.addEventListener('click', () => switchPage('checklist'));
-    document.getElementById('exportChecklistBtn').addEventListener('click', exportChecklistToCSV);
+    document.getElementById('typesPageBtn').addEventListener('click', () => switchPage('types'));
+    document.getElementById('exportChecklistBtn').addEventListener('click', exportChecklistBackup);
     document.getElementById('importChecklistBtn').addEventListener('click', openChecklistImport);
-    dom.importInput.addEventListener('change', importChecklistCSV);
+    dom.importInput.addEventListener('change', importChecklistBackup);
     document.getElementById('clearSearchBtn').addEventListener('click', clearSearch);
     document.getElementById('exportBoxesBtn').addEventListener('click', exportToExcelHTML);
     dom.prevBoxPage.addEventListener('click', () => shiftBoxPage(-1));
@@ -282,14 +283,21 @@ function updateBoxArrowState() {
 
 function switchPage(pageName) {
     const showChecklist = pageName === 'checklist';
-    dom.boxPage.classList.toggle('active', !showChecklist);
+    const showBoxes = pageName === 'boxes';
+    const showTypes = pageName === 'types';
+    dom.boxPage.classList.toggle('active', showBoxes);
     dom.checklistPage.classList.toggle('active', showChecklist);
+    document.getElementById('typesPage').classList.toggle('active', showTypes);
     dom.dexTransferPanel.classList.toggle('active', showChecklist);
-    dom.boxPageBtn.classList.toggle('active', !showChecklist);
+    dom.boxPageBtn.classList.toggle('active', showBoxes);
     dom.checklistPageBtn.classList.toggle('active', showChecklist);
-    dom.boxPageBtn.setAttribute('aria-pressed', String(!showChecklist));
+    dom.boxPageBtn.setAttribute('aria-pressed', String(showBoxes));
     dom.checklistPageBtn.setAttribute('aria-pressed', String(showChecklist));
+    const typesButton = document.getElementById('typesPageBtn');
+    typesButton.classList.toggle('active', showTypes);
+    typesButton.setAttribute('aria-pressed', String(showTypes));
     if (showChecklist) renderChecklist();
+    if (showTypes) initTypeChart();
 }
 
 function setupChecklist() {
@@ -1049,50 +1057,51 @@ function exportToExcelHTML() {
     downloadBlob(new Blob([html], { type: 'application/vnd.ms-excel' }), 'Pokemon_PC_Boxes.xls');
 }
 
-function exportChecklistToCSV() {
-    const rows = ['id;name;captured', ...pokemonData.map(poke => `${poke.id};${poke.label};${capturedPokemon.has(poke.id) ? 1 : 0}`)];
-    downloadBlob(new Blob([`\uFEFF${rows.join('\n')}`], { type: 'text/csv;charset=utf-8' }), 'Pokemon_Living_Dex_Checklist.csv');
+function exportChecklistBackup() {
+    const backup = {
+        format: 'pokemon-living-dex',
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        totalPokemon: TOTAL_POKEMON,
+        capturedIds: [...capturedPokemon].sort((a, b) => a - b)
+    };
+    downloadBlob(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json;charset=utf-8' }),
+        `Pokemon_Living_Dex_${backup.exportedAt.slice(0, 10)}.json`);
 }
 
 function openChecklistImport() {
     dom.importInput.click();
 }
 
-async function importChecklistCSV(event) {
+async function importChecklistBackup(event) {
     const file = event.target.files[0];
     if (!file) return;
 
     try {
-        const imported = parseChecklistCSV(await file.text());
-        if (!imported) throw new Error('Invalid CSV.');
+        if (file.size > 1024 * 1024) throw new Error('Arquivo muito grande.');
+        const imported = parseChecklistBackup(await file.text());
+        if (!confirm(`Restaurar ${imported.size} Pokémon capturados deste backup? O progresso atual (${capturedPokemon.size} capturados) será substituído.`)) return;
         capturedPokemon = imported;
         checklistSelection.clear();
         saveCapturedPokemon();
         renderChecklist();
+        alert('Backup restaurado com sucesso.');
     } catch (error) {
-        alert('Nao foi possivel importar este CSV da checklist.');
+        alert('Não foi possível restaurar o backup. Selecione um arquivo JSON exportado por esta checklist, na versão compatível com 905 Pokémon.');
     } finally {
         event.target.value = '';
     }
 }
 
-function parseChecklistCSV(csv) {
-    const lines = csv.replace(/^\uFEFF/, '').trim().split(/\r?\n/);
-    const columns = (lines.shift() || '').split(';').map(col => col.trim().toLowerCase());
-    const idIndex = columns.indexOf('id');
-    const capturedIndex = columns.indexOf('captured');
-    if (idIndex === -1 || capturedIndex === -1) return null;
-
-    const imported = new Set();
-    let validRows = 0;
-    lines.forEach(line => {
-        const values = line.split(';');
-        const id = Number(values[idIndex]);
-        if (!Number.isInteger(id) || id < 1 || id > TOTAL_POKEMON) return;
-        validRows++;
-        if ((values[capturedIndex] || '').trim() === '1') imported.add(id);
-    });
-    return validRows ? imported : null;
+function parseChecklistBackup(text) {
+    const backup = JSON.parse(text.replace(/^\uFEFF/, ''));
+    if (!backup || backup.format !== 'pokemon-living-dex' || backup.version !== 1 ||
+        backup.totalPokemon !== TOTAL_POKEMON || !Array.isArray(backup.capturedIds) ||
+        backup.capturedIds.length > TOTAL_POKEMON ||
+        !backup.capturedIds.every(id => Number.isInteger(id) && id >= 1 && id <= TOTAL_POKEMON)) {
+        throw new Error('Backup invalido ou incompativel.');
+    }
+    return new Set(backup.capturedIds);
 }
 
 function downloadBlob(blob, filename) {

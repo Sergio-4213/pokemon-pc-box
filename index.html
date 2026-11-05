@@ -9,6 +9,7 @@
     <!-- Modern font -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css?v=2026-07-12-security-hardening">
+    <link rel="stylesheet" href="type_chart.css?v=2026-11-05">
 </head>
 <body>
 
@@ -23,14 +24,15 @@
     <nav class="page-switcher" aria-label="Páginas do site">
         <button class="page-switch-btn active" id="boxPageBtn" aria-pressed="true">Boxes</button>
         <button class="page-switch-btn" id="checklistPageBtn" aria-pressed="false">Checklist</button>
+        <button class="page-switch-btn" id="typesPageBtn" aria-pressed="false">Tipos</button>
     </nav>
 
     <section class="dex-transfer-panel" id="dexTransferPanel" aria-label="Dados da checklist">
         <span class="dex-transfer-label">Dados da checklist</span>
         <div class="dex-transfer-actions">
-            <button class="export-checklist-btn" id="exportChecklistBtn">Exportar CSV</button>
-            <button class="import-checklist-btn" id="importChecklistBtn">Importar checklist</button>
-            <input id="checklistImportInput" type="file" accept=".csv,text/csv" hidden>
+            <button class="export-checklist-btn" id="exportChecklistBtn">Baixar backup JSON</button>
+            <button class="import-checklist-btn" id="importChecklistBtn">Restaurar backup</button>
+            <input id="checklistImportInput" type="file" accept=".json,application/json" hidden>
         </div>
     </section>
 
@@ -131,6 +133,33 @@
         </section>
     </main>
 
+    <main class="page-view types-page" id="typesPage" aria-labelledby="typesHeading">
+        <header class="types-heading">
+            <h2 id="typesHeading">Tipos e fraquezas</h2>
+            <p>Tipos simples · regras da 6ª à 8ª geração</p>
+        </header>
+        <div class="type-picker" id="typePicker" role="group" aria-label="Escolher tipo"></div>
+        <div class="type-mode" role="group" aria-label="Perspectiva do tipo selecionado">
+            <button type="button" data-type-mode="attack" aria-pressed="false">Ataque</button>
+            <button type="button" data-type-mode="defense" aria-pressed="true">Defesa</button>
+        </div>
+        <section class="type-results" id="typeResults" aria-live="polite" aria-atomic="true"></section>
+        <section class="type-matrix-section" aria-labelledby="matrixHeading">
+            <div class="type-matrix-heading">
+                <h3 id="matrixHeading">Tabela de efetividade</h3>
+                <div class="type-legend" aria-label="Multiplicadores de dano">
+                    <span class="damage-double">2×</span><span class="damage-normal">1×</span>
+                    <span class="damage-half">½×</span><span class="damage-zero">0×</span>
+                </div>
+            </div>
+            <div class="type-matrix-scroll" tabindex="0" role="region" aria-label="Tabela de tipos com rolagem horizontal e vertical">
+                <table class="type-matrix" id="typeMatrix">
+                    <caption>Linhas: tipo do ataque. Colunas: tipo de quem recebe o ataque.</caption>
+                </table>
+            </div>
+        </section>
+    </main>
+
     <!-- Pokemon detail modal shared by box slots, search results and evolution links. -->
     <div class="modal-backdrop" id="pokemonModalBackdrop">
         <button class="modal-nav modal-nav-prev" id="modalPrev" title="Pokémon anterior">&#8249;</button>
@@ -143,6 +172,7 @@
 
     <script src="pokemon_species.js?v=2026-07-12-security-hardening"></script>
     <script src="encounter_config.js?v=2026-07-12-special-obtain"></script>
-    <script src="app.js?v=2026-07-12-special-obtain-v2"></script>
+    <script src="type_chart.js?v=2026-11-05"></script>
+    <script src="app.js?v=2026-11-05-json-backup"></script>
 </body>
 </html>

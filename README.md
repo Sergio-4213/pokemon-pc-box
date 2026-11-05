@@ -21,10 +21,11 @@ O projeto mostra os Pokemon organizados em boxes no estilo PC, permite consultar
 - Selecao em lote dos Pokemon visiveis na box atual.
 - Progresso salvo automaticamente no navegador.
 - Exportacao das boxes para XLS.
-- Importacao e exportacao CSV da checklist.
+- Backup e restauracao da checklist em JSON.
 - Layout responsivo para desktop e celular.
 - Renderizacao otimizada: a pagina principal renderiza apenas a box ativa.
 - Modal com carregamento progressivo para abrir mais rapido.
+- Aba Tipos com tabela interativa dos 18 tipos e resumos de ataque e defesa.
 
 ## Tecnologias
 
@@ -56,6 +57,20 @@ Contem a logica principal da pagina:
 - busca;
 - exportacao;
 - modal de detalhes, linha evolutiva e locais de captura.
+
+### `type_chart.js` e `type_chart.css`
+
+Contem a tabela de efetividade dos 18 tipos, selecao interativa, modos de ataque/defesa e estilos responsivos. A tabela e criada somente ao abrir a aba Tipos, e os dados ficam incluidos no projeto, sem requisicoes externas durante o uso.
+
+### Aba `Tipos`
+
+Selecione um tipo para consultar suas relacoes. No modo Defesa, o resumo mostra fraquezas (2x), resistencias (metade do dano) e imunidades (0x). No modo Ataque, mostra contra quais tipos o ataque causa dano dobrado, reduzido ou nenhum dano.
+
+A tabela destaca a linha ou coluna correspondente. Os nomes nas linhas selecionam o tipo de ataque; os nomes nas colunas selecionam o tipo de defesa. No celular, o resumo se adapta a largura disponivel e a tabela permite rolagem horizontal e vertical, mantendo os cabecalhos visiveis.
+
+As relacoes seguem a tabela dos jogos principais da 6a a 8a geracao, incluindo Fada. Nao representam as regras antigas da 1a a 5a geracao, Pokemon GO, tipos duplos, habilidades ou efeitos de itens e golpes. As regras continuam iguais mesmo ao consultar um Pokemon de uma geracao anterior.
+
+Referencia: [tabela oficial de tipos Pokemon](https://sg.portal-pokemon.com/game/type-chart/). Os multiplicadores tambem podem ser conferidos nas relacoes de dano da [PokeAPI](https://pokeapi.co/docs/v2#types).
 
 
 ## Como usar a pagina
@@ -140,8 +155,8 @@ Voce pode:
 - selecionar todos os visiveis;
 - confirmar selecionados como capturados;
 - marcar selecionados como pendentes;
-- exportar a checklist em CSV;
-- importar uma checklist CSV;
+- baixar um backup JSON da checklist;
+- restaurar o progresso de um backup JSON;
 - limpar selecao.
 
 O progresso fica salvo no navegador.
@@ -184,9 +199,13 @@ Na aba `Boxes`, a organizacao das boxes pode ser baixada em:
 
 Na aba `Checklist`, o progresso pode ser exportado e importado em:
 
-- `.CSV`
+- `.JSON`
 
 Esses arquivos ajudam a consultar as boxes fora do site e a levar a checklist para outro navegador.
+
+Na checklist, use **Baixar backup JSON** para guardar os IDs dos Pokemon capturados, a data de exportacao e a versao do formato. Pokemon ausentes dessa lista sao considerados pendentes. Para recuperar o progresso em outro navegador ou celular, use **Restaurar backup**, selecione o arquivo `.json` e confirme a substituicao do progresso atual. Um backup vazio e valido e restaura todos como pendentes.
+
+A antiga transferencia em CSV foi substituida pelo backup JSON; arquivos CSV nao sao aceitos nesta opcao. Arquivos invalidos, IDs fora de 1 a 905 e versoes incompativeis sao rejeitados sem alterar o progresso. O backup inclui apenas a checklist, sem caches, filtros ou selecoes temporarias.
 
 ## Limitacoes conhecidas
 
