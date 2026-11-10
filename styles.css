@@ -804,6 +804,75 @@ button.csv-btn:hover {
     transition: width 0.25s ease;
 }
 
+.checklist-regions {
+    width: 100%;
+    border-block: 1px solid var(--border-color);
+}
+
+.checklist-regions summary {
+    padding: 0.8rem 0;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.checklist-regions summary::marker { color: var(--accent); }
+
+.checklist-region-grid {
+    list-style: none;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    column-gap: 1.25rem;
+}
+
+.checklist-region {
+    display: grid;
+    align-content: start;
+    gap: 0.45rem;
+    padding: 0.65rem 0 0.8rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.checklist-region-label,
+.checklist-region-counts {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.15rem 0.5rem;
+}
+
+.checklist-region-label span {
+    color: #6ee7b7;
+    font-size: 0.9rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.checklist-region-counts {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.checklist-region-counts span:last-child { color: var(--text-main); }
+
+.checklist-region-bar {
+    appearance: none;
+    width: 100%;
+    height: 8px;
+    border: 0;
+    border-radius: 4px;
+    background: #334155;
+    accent-color: var(--accent);
+}
+
+.checklist-region-bar::-webkit-progress-bar { background: #334155; border-radius: 4px; }
+.checklist-region-bar::-webkit-progress-value { background: var(--accent); border-radius: 4px; }
+.checklist-region-bar::-moz-progress-bar { background: var(--accent); border-radius: 4px; }
+
+@media (max-width: 560px) {
+    .checklist-region-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 0.8rem; }
+}
+
 .checklist-toolbar,
 .batch-bar {
     width: 100%;

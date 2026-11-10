@@ -8,7 +8,7 @@
     <title>Pokémon PC Box - Pokédex Nacional</title>
     <!-- Modern font -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=2026-07-12-security-hardening">
+    <link rel="stylesheet" href="styles.css?v=2026-11-10-region-progress">
     <link rel="stylesheet" href="type_chart.css?v=2026-11-05">
 </head>
 <body>
@@ -87,6 +87,11 @@
                 </div>
             </div>
         </section>
+
+        <details class="checklist-regions" open>
+            <summary>Progresso por região</summary>
+            <ul class="checklist-region-grid" id="checklistRegionProgress" aria-label="Capturas por região"></ul>
+        </details>
 
         <section class="checklist-toolbar" aria-label="Filtros da checklist">
             <input class="checklist-input" id="checklistSearch" type="text" placeholder="Pesquisar na checklist..." autocomplete="off">
@@ -173,6 +178,6 @@
     <script src="pokemon_species.js?v=2026-07-12-security-hardening"></script>
     <script src="encounter_config.js?v=2026-07-12-special-obtain"></script>
     <script src="type_chart.js?v=2026-11-05"></script>
-    <script src="app.js?v=2026-11-05-json-backup"></script>
+    <script src="app.js?v=2026-11-10-region-progress"></script>
 </body>
 </html>

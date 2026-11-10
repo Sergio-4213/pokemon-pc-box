@@ -20,6 +20,7 @@ O projeto mostra os Pokemon organizados em boxes no estilo PC, permite consultar
 - Marcador visual para Pokemon capturados.
 - Selecao em lote dos Pokemon visiveis na box atual.
 - Progresso salvo automaticamente no navegador.
+- Barras de progresso por regiao, com porcentagem capturada e total pendente.
 - Exportacao das boxes para XLS.
 - Backup e restauracao da checklist em JSON.
 - Layout responsivo para desktop e celular.
@@ -160,6 +161,8 @@ Voce pode:
 - limpar selecao.
 
 O progresso fica salvo no navegador.
+
+O painel **Progresso por região** mostra quantos Pokemon foram capturados, a porcentagem concluida e quantos faltam em cada regiao. Os totais incluem a checklist inteira e nao mudam ao usar filtros. Galar (#810 a #898) e Hisui (#899 a #905) aparecem separadamente no painel. Clique no titulo do painel para recolher ou reabrir as barras.
 
 ## Dados salvos no navegador
 

@@ -27,6 +27,11 @@ const generationRanges = [
     { value: '8', start: 810, end: 905, region: 'Galar/Hisui' }
 ];
 
+const checklistRegions = generationRanges.flatMap(range => range.value === '8'
+    ? [{ ...range, region: 'Galar', end: 898 }, { ...range, region: 'Hisui', start: 899 }]
+    : [range]);
+const regionPercent = new Intl.NumberFormat('pt-BR', { style: 'percent', maximumFractionDigits: 1 });
+
 const typeNames = {
     normal: 'Normal', fire: 'Fogo', water: 'Agua', electric: 'Eletrico',
     grass: 'Grama', ice: 'Gelo', fighting: 'Lutador', poison: 'Veneno',
@@ -115,6 +120,7 @@ function bindDom() {
         nextChecklistBox: document.getElementById('nextChecklistBox'),
         batchInfo: document.getElementById('batchInfo'),
         capturedCount: document.getElementById('capturedCount'),
+        checklistRegionProgress: document.getElementById('checklistRegionProgress'),
         totalChecklistCount: document.getElementById('totalChecklistCount'),
         capturedPercent: document.getElementById('capturedPercent'),
         capturedProgress: document.getElementById('capturedProgress'),
@@ -443,6 +449,19 @@ function updateChecklistSummary() {
     dom.totalChecklistCount.textContent = TOTAL_POKEMON;
     dom.capturedPercent.textContent = `${percent}%`;
     dom.capturedProgress.style.width = `${percent}%`;
+    dom.checklistRegionProgress.innerHTML = checklistRegions.map(({ region, start, end }) => {
+        const total = end - start + 1;
+        let captured = 0;
+        for (let id = start; id <= end; id++) {
+            if (capturedPokemon.has(id)) captured++;
+        }
+
+        return `<li class="checklist-region">
+            <div class="checklist-region-label"><strong>${region}</strong><span>${regionPercent.format(captured / total)}</span></div>
+            <progress class="checklist-region-bar" value="${captured}" max="${total}" aria-label="Capturados em ${region}"></progress>
+            <div class="checklist-region-counts"><span>${captured}/${total} capturados</span><span>Faltam ${total - captured}</span></div>
+        </li>`;
+    }).join('');
 }
 
 function updateBatchInfo() {
